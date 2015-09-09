@@ -5,6 +5,10 @@ import (
 	r "reflect"
 )
 
+const (
+	prefixSeperator = "_"
+)
+
 // StructToMap converts a struct to map. The object's default key string
 // is the struct field name but can be specified in the struct field's
 // tag value. The "cql" key in the struct field's tag value is the key
@@ -29,7 +33,36 @@ func StructToMap(val interface{}) (map[string]interface{}, bool) {
 	mapVal := make(map[string]interface{}, len(structFields))
 	for _, info := range structFields {
 		field := fieldByIndex(structVal, info.index)
-		mapVal[info.name] = field.Interface()
+
+		// If field is ptr then ensure not nil and get elem
+		if field.Kind() == r.Ptr {
+			if field.IsNil() {
+				if field.CanSet() {
+					field.Set(r.New(field.Type().Elem()))
+				} else {
+					continue
+				}
+			}
+		}
+
+		var isStruct bool
+		if field.Kind() == r.Struct {
+			isStruct = true
+		} else if field.Kind() == r.Ptr && field.Elem().Kind() == r.Struct {
+			isStruct = true
+		}
+
+		// If field is a struct then flatten
+		if isStruct && info.flatten {
+			childMap, ok := StructToMap(field.Interface())
+			if ok {
+				for ck, cv := range childMap {
+					mapVal[info.name+prefixSeperator+ck] = cv
+				}
+			}
+		} else {
+			mapVal[info.name] = field.Interface()
+		}
 	}
 	return mapVal, true
 }
@@ -38,13 +71,7 @@ func StructToMap(val interface{}) (map[string]interface{}, bool) {
 // function. For details see StructToMap.
 func MapToStruct(m map[string]interface{}, struc interface{}) error {
 	val := r.Indirect(r.ValueOf(struc))
-	structFields := cachedTypeFields(val.Type())
-
-	// Create fields map for faster lookup
-	fieldsMap := make(map[string]field)
-	for _, field := range structFields {
-		fieldsMap[field.name] = field
-	}
+	fieldsMap := getFieldsMap(val)
 
 	for k, v := range m {
 		if info, ok := fieldsMap[k]; ok {
@@ -57,25 +84,47 @@ func MapToStruct(m map[string]interface{}, struc interface{}) error {
 	return nil
 }
 
-// FieldsAndValues returns a list field names and a corresponing list of values
-// for the given struct. For details on how the field names are determined please
-// see StructToMap.
-func FieldsAndValues(val interface{}) ([]string, []interface{}, bool) {
-	// indirect so function works with both structs and pointers to them
-	structVal := r.Indirect(r.ValueOf(val))
-	kind := structVal.Kind()
-	if kind != r.Struct {
-		return nil, nil, false
+func getFieldsMap(v r.Value) map[string]field {
+	v = r.Indirect(v)
+	fieldsMap := make(map[string]field)
+	structFields := cachedTypeFields(v.Type())
+
+	// Create fields map for faster lookup
+	for _, field := range structFields {
+		fieldValue := fieldByIndex(v, field.index)
+
+		if fieldValue.Kind() == r.Ptr && field.flatten {
+			if fieldValue.IsNil() {
+				if fieldValue.CanSet() {
+					fieldValue.Set(r.New(fieldValue.Type().Elem()))
+				} else {
+					continue
+				}
+			}
+		}
+
+		var isStruct bool
+		if fieldValue.Kind() == r.Struct {
+			isStruct = true
+		} else if fieldValue.Kind() == r.Ptr && fieldValue.Elem().Kind() == r.Struct {
+			isStruct = true
+		}
+
+		// If field is a struct then flatten
+		if isStruct && field.flatten {
+			if fieldValue.Kind() == r.Ptr {
+				fieldValue = fieldValue.Elem()
+			}
+
+			for ck, cv := range getFieldsMap(fieldValue) {
+				fieldsMap[field.name+prefixSeperator+ck] = cv
+			}
+		} else {
+			fieldsMap[field.name] = field
+		}
 	}
-	structFields := cachedTypeFields(structVal.Type())
-	fields := make([]string, len(structFields))
-	values := make([]interface{}, len(structFields))
-	for i, info := range structFields {
-		field := fieldByIndex(structVal, info.index)
-		fields[i] = info.name
-		values[i] = field.Interface()
-	}
-	return fields, values, true
+
+	return fieldsMap
 }
 
 func fieldByIndex(v r.Value, index []int) r.Value {

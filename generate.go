@@ -87,6 +87,8 @@ func cassaType(i interface{}) gocql.Type {
 		return gocql.TypeInt
 	case int64:
 		return gocql.TypeBigInt
+	case uint, uint32, uint64:
+		return gocql.TypeVarint
 	case string:
 		return gocql.TypeVarchar
 	case float32:
@@ -112,6 +114,8 @@ func cassaType(i interface{}) gocql.Type {
 		return gocql.TypeInt
 	case reflect.Int64:
 		return gocql.TypeBigInt
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+		return gocql.TypeVarint
 	case reflect.String:
 		return gocql.TypeVarchar
 	case reflect.Float32:
@@ -163,6 +167,8 @@ func cassaTypeToString(t gocql.Type) (string, error) {
 		return "bigint", nil
 	case gocql.TypeVarchar:
 		return "varchar", nil
+	case gocql.TypeVarint:
+		return "varint", nil
 	case gocql.TypeFloat:
 		return "float", nil
 	case gocql.TypeDouble:

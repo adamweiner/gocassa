@@ -15,6 +15,7 @@ type field struct {
 	index     []int
 	typ       reflect.Type
 	omitEmpty bool
+	flatten   bool
 	quoted    bool
 }
 
@@ -129,6 +130,7 @@ func typeFields(t reflect.Type) []field {
 						index:     index,
 						typ:       ft,
 						omitEmpty: opts.Contains("omitempty"),
+						flatten:   opts.Contains("flatten"),
 					}))
 					if count[f.typ] > 1 {
 						// If there were multiple instances, add a second,

@@ -12,6 +12,11 @@ type Tweet struct {
 	Ingored       string      `cql:"-"`
 	Text          string      `teXt`
 	OriginalTweet *gocql.UUID `json:"origin"`
+	Author        *Author     `cql:",flatten"`
+}
+
+type Author struct {
+	Name string
 }
 
 func TestStructToMap(t *testing.T) {
@@ -31,6 +36,7 @@ func TestStructToMap(t *testing.T) {
 		"ignored",
 		"hello gocassa",
 		nil,
+		&Author{"hailo"},
 	}
 
 	m, ok = StructToMap(tweet)
@@ -48,8 +54,11 @@ func TestStructToMap(t *testing.T) {
 	if m["Text"] != tweet.Text {
 		t.Errorf("Expected %s but got %s", tweet.Text, m["Text"])
 	}
-	if m["OriginalTweet"] != tweet.OriginalTweet {
-		t.Errorf("Expected %v but got %s", tweet.OriginalTweet, m["OriginalTweet"])
+	if m["OriginalTweet"] != nil {
+		t.Errorf("Expected %v but got %s", nil, m["OriginalTweet"])
+	}
+	if m["Author_Name"] != tweet.Author.Name {
+		t.Errorf("Expected %v but got %s", tweet.Author.Name, m["Author_Name"])
 	}
 	if _, ok := m["Ignore"]; ok {
 		t.Errorf("Igonred should be empty but got %s instead", m["Ignored"])
@@ -59,7 +68,7 @@ func TestStructToMap(t *testing.T) {
 	tweet.OriginalTweet = &id
 	m, _ = StructToMap(tweet)
 	if m["OriginalTweet"] != tweet.OriginalTweet {
-		t.Errorf("Expected nil but got %s", m["OriginalTweet"])
+		t.Errorf("Expected %s but got %s", tweet.OriginalTweet, m["OriginalTweet"])
 	}
 }
 
@@ -102,6 +111,16 @@ func TestMapToStruct(t *testing.T) {
 				t.Errorf("Expected text to be empty but got %s", tweet.Text)
 			}
 		}
+		author, ok := m["Author_Name"]
+		if ok {
+			if author != tweet.Author.Name {
+				t.Errorf("Expected text to be %s but got %s", author, tweet.Author.Name)
+			}
+		} else {
+			if "" != tweet.Author.Name {
+				t.Errorf("Expected text to be empty but got %s", tweet.Author.Name)
+			}
+		}
 
 		originalTweet, ok := m["OriginalTweet"]
 		if ok {
@@ -134,33 +153,6 @@ func TestMapToStruct(t *testing.T) {
 	assert()
 	m["Ignored"] = "ignored"
 	assert()
-}
-
-func TestFieldsAndValues(t *testing.T) {
-	var emptyUUID gocql.UUID
-	id := gocql.TimeUUID()
-	var nilID *gocql.UUID
-	var tests = []struct {
-		tweet  Tweet
-		fields []string
-		values []interface{}
-	}{
-		{
-			Tweet{},
-			[]string{"Timeline", "id", "Text", "OriginalTweet"},
-			[]interface{}{"", emptyUUID, "", nilID},
-		},
-		{
-			Tweet{"timeline1", id, "ignored", "hello gocassa", &id},
-			[]string{"Timeline", "id", "Text", "OriginalTweet"},
-			[]interface{}{"timeline1", id, "hello gocassa", &id},
-		},
-	}
-	for _, test := range tests {
-		fields, values, _ := FieldsAndValues(test.tweet)
-		assertFieldsEqual(t, test.fields, fields)
-		assertValuesEqual(t, test.values, values)
-	}
 }
 
 func assertFieldsEqual(t *testing.T, a, b []string) {
