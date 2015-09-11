@@ -124,6 +124,7 @@ func typeFields(t reflect.Type) []field {
 					if name == "" {
 						name = sf.Name
 					}
+
 					fields = append(fields, fillField(field{
 						name:      name,
 						tag:       tagged,

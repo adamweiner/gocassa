@@ -3,6 +3,7 @@ package reflect
 
 import (
 	r "reflect"
+	"strings"
 )
 
 const (
@@ -64,14 +65,62 @@ func StructToMap(val interface{}) (map[string]interface{}, bool) {
 			mapVal[info.name] = field.Interface()
 		}
 	}
+
 	return mapVal, true
+}
+
+func MapsToStructs(maps []map[string]interface{}, v interface{}) error {
+	val := r.Indirect(r.ValueOf(v))
+
+	val.Set(r.MakeSlice(val.Type(), val.Len(), val.Cap()))
+
+	// Iterate through the slice/array and decode each element before adding it
+	// to the dest slice/array
+	for i, m := range maps {
+		// Get element of array, growing if necessary.
+		if i >= val.Cap() {
+			newcap := val.Cap() + val.Cap()/2
+			if newcap < 4 {
+				newcap = 4
+			}
+			newval := r.MakeSlice(val.Type(), val.Len(), newcap)
+			r.Copy(newval, val)
+			val.Set(newval)
+		}
+		if i >= val.Len() {
+			val.SetLen(i + 1)
+		}
+
+		if i < val.Len() {
+			// Decode into element.
+			err := MapToStruct(m, val.Index(i))
+			if err != nil {
+				return err
+			}
+		}
+
+		i++
+	}
+
+	// Ensure that the destination is the correct size
+	if len(maps) < val.Len() {
+		val.SetLen(len(maps))
+	}
+
+	return nil
 }
 
 // MapToStruct converts a map to a struct. It is the inverse of the StructToMap
 // function. For details see StructToMap.
 func MapToStruct(m map[string]interface{}, struc interface{}) error {
-	val := r.Indirect(r.ValueOf(struc))
-	fieldsMap := getFieldsMap(val)
+
+	val := r.ValueOf(struc)
+	valCopy := r.New(val.Type().Elem())
+	val = r.Indirect(val)
+	valCopy = r.Indirect(valCopy)
+
+	// Get copy of type
+	fieldsMap := getFieldsMap(valCopy, []int{})
 
 	for k, v := range m {
 		if info, ok := fieldsMap[k]; ok {
@@ -80,18 +129,30 @@ func MapToStruct(m map[string]interface{}, struc interface{}) error {
 				structField.Set(r.ValueOf(v))
 			}
 		}
+
+		// If exact match not found iterate through map
+		for fieldName, info := range fieldsMap {
+			if strings.EqualFold(k, fieldName) {
+				structField := fieldByIndex(val, info.index)
+				if structField.Type().Name() == r.TypeOf(v).Name() {
+					structField.Set(r.ValueOf(v))
+				}
+			}
+		}
 	}
 	return nil
 }
 
-func getFieldsMap(v r.Value) map[string]field {
-	v = r.Indirect(v)
+func getFieldsMap(v r.Value, indexPrefix []int) map[string]field {
+
 	fieldsMap := make(map[string]field)
 	structFields := cachedTypeFields(v.Type())
 
 	// Create fields map for faster lookup
 	for _, field := range structFields {
 		fieldValue := fieldByIndex(v, field.index)
+		// Prefix index
+		field.index = append(indexPrefix, field.index...)
 
 		if fieldValue.Kind() == r.Ptr && field.flatten {
 			if fieldValue.IsNil() {
@@ -116,7 +177,7 @@ func getFieldsMap(v r.Value) map[string]field {
 				fieldValue = fieldValue.Elem()
 			}
 
-			for ck, cv := range getFieldsMap(fieldValue) {
+			for ck, cv := range getFieldsMap(fieldValue, field.index) {
 				fieldsMap[field.name+prefixSeperator+ck] = cv
 			}
 		} else {
@@ -139,7 +200,9 @@ func fieldByIndex(v r.Value, index []int) r.Value {
 			}
 			v = v.Elem()
 		}
+
 		v = v.Field(i)
+
 	}
 
 	return v

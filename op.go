@@ -2,10 +2,11 @@ package gocassa
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"strconv"
+
+	"github.com/hailocab/gocassa/reflect"
 )
 
 const (
@@ -57,11 +58,8 @@ func (w *singleOp) read() error {
 	if err != nil {
 		return err
 	}
-	bytes, err := json.Marshal(maps)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(bytes, w.result)
+
+	return reflect.MapsToStructs(maps, w.result)
 }
 
 func (w *singleOp) readOne() error {
@@ -77,11 +75,7 @@ func (w *singleOp) readOne() error {
 			line: n,
 		}
 	}
-	bytes, err := json.Marshal(maps[0])
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(bytes, w.result)
+	return reflect.MapToStruct(maps[0], w.result)
 }
 
 func (w *singleOp) write() error {

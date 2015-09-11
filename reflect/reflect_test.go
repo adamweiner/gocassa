@@ -80,6 +80,7 @@ func TestMapToStruct(t *testing.T) {
 		if err := MapToStruct(m, &tweet); err != nil {
 			t.Fatal(err.Error())
 		}
+
 		timeline, ok := m["Timeline"]
 		if ok {
 			if timeline != tweet.Timeline {
