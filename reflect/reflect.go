@@ -34,6 +34,48 @@ func StructToMap(val interface{}) (map[string]interface{}, bool) {
 	return mapVal, true
 }
 
+// MapsToStructs converts a slice of maps to a slice of structs using MapToStruct
+func MapsToStructs(maps []map[string]interface{}, v interface{}) error {
+	val := r.Indirect(r.ValueOf(v))
+
+	val.Set(r.MakeSlice(val.Type(), val.Len(), val.Cap()))
+
+	// Iterate through the slice/array and decode each element before adding it
+	// to the dest slice/array
+	for i, m := range maps {
+		// Get element of array, growing if necessary.
+		if i >= val.Cap() {
+			newcap := val.Cap() + val.Cap()/2
+			if newcap < 4 {
+				newcap = 4
+			}
+			newval := r.MakeSlice(val.Type(), val.Len(), newcap)
+			r.Copy(newval, val)
+			val.Set(newval)
+		}
+		if i >= val.Len() {
+			val.SetLen(i + 1)
+		}
+
+		if i < val.Len() {
+			// Decode into element.
+			err := MapToStruct(m, val.Index(i))
+			if err != nil {
+				return err
+			}
+		}
+
+		i++
+	}
+
+	// Ensure that the destination is the correct size
+	if len(maps) < val.Len() {
+		val.SetLen(len(maps))
+	}
+
+	return nil
+}
+
 // MapToStruct converts a map to a struct. It is the inverse of the StructToMap
 // function. For details see StructToMap.
 func MapToStruct(m map[string]interface{}, struc interface{}) error {

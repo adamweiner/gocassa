@@ -13,7 +13,7 @@ import (
 
 type Customer struct {
 	Id   string
-	Name string
+	Name string `json:"ignored"` // JSON tag should not affect test
 }
 
 var ns KeySpace
